@@ -24,9 +24,12 @@ df["PurePremium"] = df["ClaimAmountCut"] / df["Exposure"]
 y = df["PurePremium"]
 # TODO: Why do you think, we divide by exposure here to arrive at
 # our outcome variable?
+# Because we would be looking at policies with different active durations.
+# One person could have a policy of 16 years, and one for 8.
+# The claim amounts would be different because the timespan is different.
+# We compare risk fairly
 
-
-df = create_sample_split(df, 'idPol')
+df = create_sample_split(df, 'IDpol')
 train = np.where(df["sample"] == "train")
 test = np.where(df["sample"] == "test")
 df_train = df.iloc[train].copy()
@@ -183,7 +186,25 @@ print(
 # 1: Define the modelling pipeline. Tip: This can simply be a
 # LGBMRegressor based on X_train_t from before.
 # 2. Make sure we are choosing the correct objective for our estimator.
-
+lgbm_pipeline = Pipeline(
+    steps=[
+        ("preprocess", preprocessor),
+        (
+            "estimate",
+            LGBMRegressor(
+                objective="tweedie",
+                tweedie_variance_power=1.5,
+                n_estimators=500,
+                learning_rate=0.05,
+                num_leaves=31,
+                min_data_in_leaf=200,
+                subsample=0.8,
+                colsample_bytree=0.8,
+            ),
+        ),
+    ]
+)
+model_pipeline = lgbm_pipeline
 model_pipeline.fit(X_train_t, y_train_t, estimate__sample_weight=w_train_t)
 df_test["pp_t_lgbm"] = model_pipeline.predict(X_test_t)
 df_train["pp_t_lgbm"] = model_pipeline.predict(X_train_t)
@@ -213,8 +234,18 @@ print(
 # Note: Typically we tune many more parameters and larger grids,
 # but to save compute time here, we focus on getting the learning rate
 # and the number of estimators somewhat aligned -> tune learning_rate and n_estimators
-cv = GridSearchCV(
+param_grid = {
+    "estimate__learning_rate": [0.1, 0.05, 0.01],
+    "estimate__n_estimators": [300, 500, 1000],
+}
 
+cv = GridSearchCV(
+    estimator=model_pipeline,
+    param_grid=param_grid,
+    scoring="neg_mean_poisson_deviance",
+    cv=3,
+    n_jobs=-1,
+    verbose=1,
 )
 cv.fit(X_train_t, y_train_t, estimate__sample_weight=w_train_t)
 
