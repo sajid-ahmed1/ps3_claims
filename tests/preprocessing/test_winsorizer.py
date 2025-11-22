@@ -26,3 +26,13 @@ def test_winsorizer(lower_quantile, upper_quantile):
     # special case: same quantile
     if lower_quantile == upper_quantile:
         assert np.allclose(X_t, wins.lower_quantile_)
+
+
+def test_winsorizer_solution(lower_quantile, upper_quantile):
+
+    X = np.random.normal(0, 1, 1000)
+
+    Xt = Winsorizer(lower_quantile, upper_quantile).fit_transformation(X)
+
+    # quantiles computed correctly
+    assert (Xt.max() == np.quantile(X, q=upper_quantile)) & (Xt.min() == np.quantile(X, q=lower_quantile)), "error"
