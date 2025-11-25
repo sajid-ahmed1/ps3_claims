@@ -274,6 +274,10 @@ print(
     )
 )
 # %%
+print("Best params:", cv.best_params_)
+print("Best estimator:", cv.best_estimator_)
+
+# %%
 # Let's compare the sorting of the pure premium predictions
 
 
@@ -325,4 +329,151 @@ ax.set(
 ax.legend(loc="upper left")
 plt.plot()
 
+# %%
+# This is the start of problem set 4 :)
+
+# Exercise 1
+# TODO: Create a plot of average claims (claimNB) per BonusMalus
+print(df["BonusMalus"].unique())
+print(df["ClaimAmount"].unique())
+print(df["Exposure"].unique())
+df_test = df[["BonusMalus","ClaimAmount","Exposure"]]
+# %%
+bonus_summary = (
+    df.groupby("BonusMalus")
+      .apply(lambda g: pd.Series({
+          "total_claims": (g["ClaimAmount"] * g["Exposure"]).sum(),
+          "total_exposure": g["Exposure"].sum()
+      }))
+)
+
+bonus_summary["weighted_mean_claims"] = (
+    bonus_summary["total_claims"] / bonus_summary["total_exposure"]
+)
+
+bonus_summary.head()
+
+
+# %%
+plt.figure(figsize=(10,5))
+plt.plot(bonus_summary.index, bonus_summary["weighted_mean_claims"], marker="o", linestyle="-")
+plt.xlabel("BonusMalus")
+plt.ylabel("Weighted Mean Claim Amount")
+plt.title("Weighted Average Claim Amount by BonusMalus")
+plt.grid(True)
+plt.show()
+
+# %%
+# TODO: Create a new model pipeline called constrained_lgbm
+# TODO: Include the monotonic constrianted that [0,0,0,1,...] for whhen BonusMalus is 1
+# The categorical and numerical columns we want our model to take as inputs
+
+categoricals = ["VehBrand", "VehGas", "Region", "Area", "DrivAge", "VehAge", "VehPower"]
+numeric_cols = ["BonusMalus", "Density"]
+predictors = categoricals + numeric_cols
+print(f"These are the input features: {predictors}")
+print(f"If you're confused, these are the categorical columns we want to input in: {categoricals}")
+print(f"and these are the numericals: {numeric_cols}")
+
+
+# %%
+# Addressing the preprocessing steps
+numeric_pipeline = Pipeline(
+    steps=[
+        ("scale", StandardScaler()),
+        (
+            "splines",
+            SplineTransformer(
+                degree=3,
+                n_knots=5,
+                knots="quantile",
+                include_bias=False,
+            ),
+        ),
+    ],
+)
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("num", numeric_pipeline, numeric_cols),
+        (
+            "cat",
+            OneHotEncoder(
+                sparse_output=False,
+                drop="first",
+                handle_unknown="ignore",
+            ),
+            categoricals,
+        ),
+    ]
+)
+preprocessor.set_output(transform="pandas")
+preprocessor.fit(df_train)
+feature_names = preprocessor.get_feature_names_out()
+print(f"These are the feature names (the inputs for the model) in order: {feature_names}.")
+print(f"Use the columns to understand which columns need monotonic constraints 1,0 or -1. The count of feature names is: {len(feature_names)}")
+
+# %%
+# Creating constrianted_lgbm that has the best params from GridSearchCV and the monotone constriants
+
+monotonic_constraints = [
+    # BonusMalus spline columns (6) → +1
+    1, 1, 1, 1, 1, 1,
+
+    # Density spline columns (6) → 0
+    0, 0, 0, 0, 0, 0,
+
+    # Categorical one-hot encoded columns (49) → 0
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0
+]
+
+constrained_lgbm = Pipeline(
+    steps=[
+        ("preprocess", preprocessor),
+        (
+            "estimate",
+            LGBMRegressor(
+                learning_rate=0.01,
+                n_estimators=300,
+                objective='tweedie',
+                tweedie_variance_power=1.5,
+                colsample_bytree=0.8,
+                subsample=0.8,
+                min_data_in_leaf=200,
+                monotone_constraints=monotonic_constraints
+            ),
+        ),
+    ]
+)
+
+
+# %%
+# Fitting the pipeline and printing training and testing unit deviance = scalar loss = model performance metric
+constrained_lgbm.fit(X_train_t, y_train_t, estimate__sample_weight=w_train_t)
+df_test["pp_t_constrained_lgbm"] = constrained_lgbm.predict(X_test_t)
+df_train["pp_t_constrained_lgbm"] = constrained_lgbm.predict(X_train_t)
+print(
+    "training loss t_constrained_lgbm:  {}".format(
+        TweedieDist.deviance(y_train_t, df_train["pp_t_constrained_lgbm"],
+                             sample_weight=w_train_t)
+        / np.sum(w_train_t)
+    )
+)
+
+print(
+    "testing loss t_constrained_lgbm:  {}".format(
+        TweedieDist.deviance(y_test_t, df_test["pp_t_constrained_lgbm"],
+                             sample_weight=w_test_t)
+        / np.sum(w_test_t)
+    )
+)
+# %%
+# Displaying the train and test dataset for my pleasure
+df_train.head()
+# %%
+# Displaying the train and test dataset for my pleasure
+df_test.head()
 # %%
