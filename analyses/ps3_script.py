@@ -13,6 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, SplineTransformer, StandardScaler
 
 from ps3.data import create_sample_split, load_transform
+from ps3.evaluation import evaluate_predictions
 
 # %%
 # load data
@@ -502,6 +503,8 @@ lgbm_eval.fit(
     callbacks=[lgb.record_evaluation(evals_result)]
 )
 
+df_test["pp_t_lgbm_eval"] = lgbm_eval.predict(X_test_t)
+df_train["pp_t_lgbm_eval"] = lgbm_eval.predict(X_train_t)
 # %%
 # Extract the underlying LightGBM booster
 lgb.plot_metric(evals_result)
@@ -510,4 +513,22 @@ print("- We have two lines, one for training and one for testing dataset")
 print("- The numbers on the Y axis come from the evaluation metric which is the unit deviance = scalar loss = poisson deviance. Even through our tweedie variance is 1.5 so inbetween Gamma and Poisson, we still use poisson deviance because that’s the standard that LGBM uses.")
 print("- X axis is the number of iterations, in the model we stated 300 estimations. This means every iteration is a tree, so x is the number of trees trained.")
 print("- Early on, the model performance is 80 for testing and 47 ish for training. As we add more iterations, the model performance falls to less than 45. The test performance goes to 75. It means there are no sudden changes so the model does not overfit or underfit. Although the 47 is quite low, could be due to the monotonic constraint issue. The model is optimally fitted.")
+# %%
+# Using the functions from _evaluate_predictions to compare the models of constrained_lgbm vs lgbm_eval
+results_constrained = evaluate_predictions(
+    y_true=df_test["PurePremium"],
+    y_pred=df_test["pp_t_constrained_lgbm"],
+    sample_weight=df_test["Exposure"]
+)
+
+results_unconstrained = evaluate_predictions(
+    y_true=df_test["PurePremium"],
+    y_pred=df_test["pp_t_lgbm_eval"],
+    sample_weight=df_test["Exposure"]
+)
+
+# %%
+print(f"The results for LGBM constrained: \n{results_constrained}")
+print(f"The results for LGBM unconstrained: \n{results_unconstrained}")
+
 # %%
