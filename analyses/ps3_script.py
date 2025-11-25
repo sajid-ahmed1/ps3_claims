@@ -337,7 +337,7 @@ plt.plot()
 print(df["BonusMalus"].unique())
 print(df["ClaimAmount"].unique())
 print(df["Exposure"].unique())
-df_test = df[["BonusMalus","ClaimAmount","Exposure"]]
+df[["BonusMalus","ClaimAmount","Exposure"]]
 # %%
 bonus_summary = (
     df.groupby("BonusMalus")
@@ -477,3 +477,4 @@ df_train.head()
 # Displaying the train and test dataset for my pleasure
 df_test.head()
 # %%
+# Exercise 2 from Problem Set 4
