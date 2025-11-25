@@ -11,6 +11,7 @@ from sklearn.metrics import auc
 from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, SplineTransformer, StandardScaler
+import dalex as dx
 
 from ps3.data import create_sample_split, load_transform
 from ps3.evaluation import evaluate_predictions
@@ -531,4 +532,19 @@ results_unconstrained = evaluate_predictions(
 print(f"The results for LGBM constrained: \n{results_constrained}")
 print(f"The results for LGBM unconstrained: \n{results_unconstrained}")
 
+# %%
+# Using the explanier object to undersand the marginal effects of specific features for the constrained LGBM - Exercise 4 for PS4
+explainer_constrained = dx.Explainer(
+    model = constrained_lgbm,
+    data = df_test[predictors],
+    y = df_test["PurePremium"],
+    label = "Constrained LGBM"
+)
+
+# %%
+# Creating the plot
+pd_constrained = explainer_constrained.model_profile(
+    variables=predictors
+)
+pd_constrained.plot()
 # %%
