@@ -5,6 +5,7 @@ import pandas as pd
 from dask_ml.preprocessing import Categorizer
 from glum import GeneralizedLinearRegressor, TweedieDistribution
 from lightgbm import LGBMRegressor
+import lightgbm as lgb
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import auc
 from sklearn.model_selection import GridSearchCV
@@ -273,7 +274,7 @@ print(
         np.sum(df["Exposure"].values[test] * df_test["pp_t_lgbm"]),
     )
 )
-# %%
+
 print("Best params:", cv.best_params_)
 print("Best estimator:", cv.best_estimator_)
 
@@ -337,8 +338,8 @@ plt.plot()
 print(df["BonusMalus"].unique())
 print(df["ClaimAmount"].unique())
 print(df["Exposure"].unique())
-df_test = df[["BonusMalus","ClaimAmount","Exposure"]]
-# %%
+df[["BonusMalus","ClaimAmount","Exposure"]]
+
 bonus_summary = (
     df.groupby("BonusMalus")
       .apply(lambda g: pd.Series({
@@ -476,4 +477,37 @@ df_train.head()
 # %%
 # Displaying the train and test dataset for my pleasure
 df_test.head()
+print(f"The length of constraints to training data shape: {len(monotonic_constraints), X_train_t.shape[1]}")
+# %% Exercise 2 from Problem Set 4
+# Refitting the LGBM with constrained and best params with our eval_set and eval_metric
+lgbm_eval = LGBMRegressor(
+        learning_rate=0.01,
+        n_estimators=300,
+        objective='tweedie',
+        tweedie_variance_power=1.5,
+        colsample_bytree=0.8,
+        subsample=0.8,
+        min_data_in_leaf=200
+        )
+
+# %%
+# Fitting the lgbm_eval model removing monotone constriants because it was breaking the kernel
+evals_result = {}
+lgbm_eval.fit(
+    X_train_t,
+    y_train_t,
+    sample_weight=w_train_t,
+    eval_set=[(X_train_t, y_train_t), (X_test_t, y_test_t)],
+    eval_metric="mean_poisson_deviance",
+    callbacks=[lgb.record_evaluation(evals_result)]
+)
+
+# %%
+# Extract the underlying LightGBM booster
+lgb.plot_metric(evals_result)
+print(f"From the plot, we understand: ")
+print("- We have two lines, one for training and one for testing dataset")
+print("- The numbers on the Y axis come from the evaluation metric which is the unit deviance = scalar loss = poisson deviance. Even through our tweedie variance is 1.5 so inbetween Gamma and Poisson, we still use poisson deviance because that’s the standard that LGBM uses.")
+print("- X axis is the number of iterations, in the model we stated 300 estimations. This means every iteration is a tree, so x is the number of trees trained.")
+print("- Early on, the model performance is 80 for testing and 47 ish for training. As we add more iterations, the model performance falls to less than 45. The test performance goes to 75. It means there are no sudden changes so the model does not overfit or underfit. Although the 47 is quite low, could be due to the monotonic constraint issue. The model is optimally fitted.")
 # %%
