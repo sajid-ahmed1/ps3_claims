@@ -548,3 +548,23 @@ pd_constrained = explainer_constrained.model_profile(
 )
 pd_constrained.plot()
 # %%
+# Exercise 5 of PS4
+explainer_benchmark_glm = dx.Explainer(
+    model = t_glm1,
+    data = df_test[predictors],
+    y = df_test["PurePremium"],
+    label = "GLM Benchmark"
+)
+row = df_test[predictors].iloc[[0]]
+shap_constrained = explainer_constrained.predict_parts(
+    row,
+    type="shap"
+)
+shap_glm = explainer_benchmark_glm.predict_parts(
+    row,
+    type="shap"
+)
+shap_constrained.plot()
+shap_glm.plot()
+
+# %%
